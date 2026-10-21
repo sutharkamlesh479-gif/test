@@ -62,7 +62,7 @@ Start the local dashboard:
 
     omega serve
 
-Then open http://127.0.0.1:8765. The browser dashboard accepts files up to 12 MiB each. It uploads to the OMEGA server on the same computer, bound to loopback only. Stop it with Ctrl+C.
+Then open http://127.0.0.1:8765. The dashboard supports single-file inspection, event analysis, build comparison, and a combined investigation case. It accepts files up to 12 MiB each. It uploads to the OMEGA server on the same computer, bound to loopback only. Stop it with Ctrl+C.
 
 ## Event format
 
