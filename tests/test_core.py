@@ -101,3 +101,22 @@ def test_dashboard_homepage_is_served() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+
+
+
+def test_dashboard_rejects_untrusted_host_header() -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        conn = HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+        conn.request("GET", "/", headers={"Host": "attacker.example"})
+        res = conn.getresponse()
+        body = res.read().decode()
+        assert res.status == 421
+        assert "localhost Host headers" in body
+        conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
