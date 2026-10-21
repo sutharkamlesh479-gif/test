@@ -10,6 +10,7 @@ import pytest
 
 from aurix_omega.analyzers import analyze_file, compare_files, extract_printable_strings, sha256_file
 from aurix_omega.events import analyze_events
+from aurix_omega.investigation import run_investigation
 from aurix_omega.report import render_html, write_html
 from aurix_omega.web import DashboardHandler, _decode_upload
 
@@ -122,3 +123,34 @@ def test_dashboard_rejects_untrusted_host_header() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+
+
+
+def test_combined_investigation_aggregates_evidence(tmp_path: Path) -> None:
+    artifact = tmp_path / "program.txt"
+    baseline = tmp_path / "program-old.txt"
+    events = tmp_path / "events.jsonl"
+    artifact.write_text("current build marker", encoding="utf-8")
+    baseline.write_text("previous build marker", encoding="utf-8")
+    events.write_text(
+        json.dumps({"timestamp": "2026-01-02T10:00:00Z", "event_type": "process_start", "process": "program.txt", "pid": 8}),
+        encoding="utf-8",
+    )
+    result = run_investigation(artifact_path=artifact, events_path=events, baseline_path=baseline)
+    assert result["investigation_model"] == "deterministic-orchestration-v1"
+    assert result["summary"]["steps_completed"] == 3
+    assert "baseline_comparison" in result["analyses"]
+    assert "event_timeline" in result["analyses"]
+    assert result["verdict"]["status"] == "not_automatically_determined"
+
+
+def test_investigation_requires_an_input() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        run_investigation()
+
+
+def test_baseline_requires_target_artifact(tmp_path: Path) -> None:
+    file = tmp_path / "baseline.bin"
+    file.write_bytes(b"baseline")
+    with pytest.raises(ValueError, match="requires --artifact"):
+        run_investigation(baseline_path=file)
