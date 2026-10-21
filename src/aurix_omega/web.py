@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import tempfile
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 from .analyzers import analyze_file, compare_files
 from .events import analyze_events
@@ -98,7 +98,46 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _json(self, code: int, value: dict[str, Any]) -> None:
         self._send(code, json.dumps(value, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
+    def _host_allowed(self) -> bool:
+        """Reject DNS-rebinding-style hostnames and non-loopback Host values."""
+        try:
+            parsed = urlsplit("//" + self.headers.get("Host", ""))
+            return parsed.hostname in {"127.0.0.1", "localhost"} and parsed.port == self.server.server_port
+        except ValueError:
+            return False
+
+    def _origin_allowed(self) -> bool:
+        """If supplied, Origin must match this exact local host and port."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        try:
+            parsed_origin = urlsplit(origin)
+            parsed_host = urlsplit("//" + self.headers.get("Host", ""))
+            return (
+                parsed_origin.scheme == "http"
+                and parsed_origin.username is None
+                and parsed_origin.password is None
+                and parsed_origin.hostname in {"127.0.0.1", "localhost"}
+                and parsed_origin.hostname == parsed_host.hostname
+                and parsed_origin.port == self.server.server_port
+                and parsed_host.port == self.server.server_port
+            )
+        except ValueError:
+            return False
+
+    def _guard_request(self) -> bool:
+        if not self._host_allowed():
+            self._json(421, {"error": "This local dashboard only accepts localhost Host headers."})
+            return False
+        if not self._origin_allowed():
+            self._json(403, {"error": "Cross-origin requests are not accepted."})
+            return False
+        return True
+
     def do_GET(self) -> None:
+        if not self._guard_request():
+            return
         route = urlparse(self.path).path
         if route == "/":
             self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
@@ -108,6 +147,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Not found"})
 
     def do_POST(self) -> None:
+        if not self._guard_request():
+            return
         route = urlparse(self.path).path
         if route not in {"/api/inspect", "/api/events", "/api/diff"}:
             self._json(404, {"error": "Not found"})
