@@ -10,6 +10,7 @@ from typing import Any
 from . import __version__
 from .analyzers import analyze_file, compare_files
 from .events import analyze_events
+from .investigation import run_investigation
 from .report import write_html
 
 
@@ -38,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     diff.add_argument("before")
     diff.add_argument("after")
     diff.add_argument("--output", "-o")
+    investigate = commands.add_parser("investigate", help="Run a combined evidence-led investigation.")
+    investigate.add_argument("--artifact", help="Artifact file to inspect without execution.")
+    investigate.add_argument("--events", help="Authorized JSON or JSONL event export.")
+    investigate.add_argument("--baseline", help="Optional baseline file; requires --artifact.")
+    investigate.add_argument("--output", "-o", help="Write combined JSON report to this path.")
     report = commands.add_parser("report", help="Render a JSON report to self-contained HTML.")
     report.add_argument("json_file")
     report.add_argument("--html", required=True)
@@ -56,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
             _write_json(analyze_events(args.file), args.output)
         elif args.command == "diff":
             _write_json(compare_files(args.before, args.after), args.output)
+        elif args.command == "investigate":
+            _write_json(run_investigation(args.artifact, args.events, args.baseline), args.output)
         elif args.command == "report":
             value = json.loads(Path(args.json_file).read_text(encoding="utf-8"))
             if not isinstance(value, dict):
