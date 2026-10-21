@@ -24,7 +24,7 @@ main{max-width:1100px;margin:auto;padding:32px 18px 60px}.top{display:flex;justi
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:14px}.panel{background:linear-gradient(150deg,#13211a,#0e1713);border:1px solid var(--line);border-radius:16px;padding:20px;margin:12px 0}.panel h2{margin-top:0}
 label{display:block;font-weight:650;margin:10px 0 6px}input[type=file]{width:100%;border:1px dashed #547564;border-radius:10px;padding:12px;background:#0a120e;color:var(--muted)}
 button{background:var(--green);color:#062014;border:0;border-radius:10px;padding:11px 15px;font-weight:800;cursor:pointer;margin-top:12px}button:disabled{opacity:.6;cursor:wait}.hint{font-size:.86rem}.status{min-height:24px;color:var(--green);overflow-wrap:anywhere}.risk{color:var(--red)}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:580px;overflow:auto;background:#070b09;border:1px solid var(--line);border-radius:12px;padding:15px;color:#d7eadf}.output{display:none}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:580px;overflow:auto;background:#070b09;border:1px solid var(--line);border-radius:12px;padding:15px;color:#d7eadf}.output{display:none}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:16px 0}.metric,.viz-panel{background:#09120d;border:1px solid var(--line);border-radius:12px;padding:13px;min-width:0}.metric small{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em}.metric strong{display:block;color:var(--green);font-size:1.05rem;overflow-wrap:anywhere}.viz-panel{margin:14px 0}.viz-panel h3{margin:0 0 8px}.event-graph{width:100%;height:auto;display:block;overflow:visible}.timeline{padding-left:24px}.timeline li{margin:8px 0;color:var(--muted)}.timeline b{color:var(--text)}.finding-row{padding:12px 0;border-top:1px solid var(--line)}.finding-row strong{color:var(--green)}
 footer{border-top:1px solid var(--line);padding-top:16px;margin-top:30px;color:var(--muted);font-size:.85rem}</style></head><body><main>
 <header class="top"><div class="brand">AURIX / OMEGA</div><div class="hint">LOCAL-FIRST · EVIDENCE-FOCUSED</div></header>
 <section class="hero"><div class="eyebrow">Cyber investigation workbench</div><h1>Observe the evidence.<br><span>Question the verdict.</span></h1>
@@ -36,7 +36,7 @@ footer{border-top:1px solid var(--line);padding-top:16px;margin-top:30px;color:v
 <section class="panel"><div class="eyebrow">03 / Compare</div><h2>Compare two files</h2><p>Review hash, size and printable-string changes.</p>
 <label for="beforeFile">Baseline file</label><input id="beforeFile" type="file"><label for="afterFile">Newer file</label><input id="afterFile" type="file"><button id="diffBtn">Compare artifacts</button></section></div>
 <section class="panel"><div class="eyebrow">Investigation output</div><div id="status" class="status" role="status">Ready. Select a task above.</div>
-<div id="output" class="output"><pre id="result"></pre><button id="downloadBtn">Download JSON report</button></div>
+<div id="output" class="output"><div id="visual"></div><details><summary>Raw JSON evidence</summary><pre id="result"></pre></details><button id="downloadBtn">Download JSON report</button></div>
 <p class="hint">OMEGA treats selected files as data and never launches them. Review indicators are not malware verdicts. Maximum upload: 12 MiB per file.</p></section>
 <footer>Loopback only. Stop the server with Ctrl+C. Created by Kamlesh Suthar.</footer></main>
 <script>(function(){"use strict";var statusEl=document.getElementById("status"),out=document.getElementById("output"),result=document.getElementById("result"),last=null;
@@ -44,7 +44,30 @@ function status(t,bad){statusEl.textContent=t;statusEl.className=bad?"status ris
 function fileData(file){return new Promise(function(resolve,reject){if(!file){reject(new Error("Choose all required file(s) first."));return;}if(file.size>12*1024*1024){reject(new Error("Dashboard upload limit is 12 MiB per file."));return;}
 var r=new FileReader();r.onerror=function(){reject(new Error("Could not read selected file."));};r.onload=function(){var v=String(r.result);resolve({filename:file.name,data_base64:v.slice(v.indexOf(",")+1)});};r.readAsDataURL(file);});}
 async function post(route,payload){var r=await fetch(route,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});var d=await r.json();if(!r.ok)throw new Error(d.error||"Request failed.");return d;}
-function show(data){last=data;result.textContent=JSON.stringify(data,null,2);out.style.display="block";}
+function make(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n;}
+function metric(parent,label,value){var card=make("div","metric"),small=make("small","",label),strong=make("strong","",value);card.appendChild(small);card.appendChild(strong);parent.appendChild(card);}
+function show(data){
+ last=data;result.textContent=JSON.stringify(data,null,2);out.style.display="block";
+ var visual=document.getElementById("visual");visual.replaceChildren();
+ var metrics=make("div","metrics");
+ if(data.artifact){metric(metrics,"SHA-256",String(data.artifact.sha256||"").slice(0,18)+"…");metric(metrics,"Size",String(data.artifact.size_bytes||0)+" bytes");metric(metrics,"Format",data.artifact.detected_type||"Unknown");metric(metrics,"Strings",data.artifact.printable_string_count||0);}
+ if(data.summary){if(data.summary.records_parsed!==undefined)metric(metrics,"Events",data.summary.records_parsed);if(data.summary.timeline_links!==undefined)metric(metrics,"Timeline links",data.summary.timeline_links);if(data.summary.parse_errors!==undefined)metric(metrics,"Parse issues",data.summary.parse_errors);if(data.summary.result!==undefined)metric(metrics,"Static result",data.summary.result);}
+ if(data.diff){metric(metrics,"Identical bytes",data.diff.identical_sha256?"Yes":"No");metric(metrics,"Size delta",String(data.diff.size_delta_bytes)+" bytes");metric(metrics,"Added strings",(data.diff.added_printable_strings||[]).length);metric(metrics,"Removed strings",(data.diff.removed_printable_strings||[]).length);}
+ if(metrics.childElementCount)visual.appendChild(metrics);
+ if(Array.isArray(data.findings)&&data.findings.length){var box=make("section","viz-panel");box.appendChild(make("h3","","Findings to review"));data.findings.slice(0,50).forEach(function(f){var row=make("div","finding-row"),head=make("strong","",String(f.severity||"info").toUpperCase()+" · "+(f.title||"Observation")),desc=make("p","",f.description||""),evidence=make("p","hint","Evidence: "+JSON.stringify(f.evidence||[]));row.appendChild(head);row.appendChild(desc);row.appendChild(evidence);box.appendChild(row);});visual.appendChild(box);}
+ if(Array.isArray(data.events)&&data.events.length){
+   var box=make("section","viz-panel");box.appendChild(make("h3","","Observed event relationships"));box.appendChild(make("p","hint","Edges indicate temporal association only—not causation. Graph shows at most 20 events."));
+   var shown=data.events.slice(0,20),byId=new Map(),coords=new Map(),ns="http://www.w3.org/2000/svg",rows=Math.ceil(shown.length/4),height=Math.max(100,rows*68+24),svg=document.createElementNS(ns,"svg");
+   svg.setAttribute("viewBox","0 0 720 "+height);svg.setAttribute("role","img");svg.setAttribute("aria-label","Event relationship graph");svg.classList.add("event-graph");
+   shown.forEach(function(e,i){byId.set(e.event_id,e);coords.set(e.event_id,{x:45+(i%4)*180,y:30+Math.floor(i/4)*68});});
+   (data.edges||[]).forEach(function(edge){var a=coords.get(edge.from_event),b=coords.get(edge.to_event);if(!a||!b)return;var line=document.createElementNS(ns,"line");line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);line.setAttribute("x2",b.x);line.setAttribute("y2",b.y);line.setAttribute("stroke","#527766");line.setAttribute("stroke-width","2");svg.appendChild(line);});
+   shown.forEach(function(e){var c=coords.get(e.event_id),circle=document.createElementNS(ns,"circle");circle.setAttribute("cx",c.x);circle.setAttribute("cy",c.y);circle.setAttribute("r","7");circle.setAttribute("fill","#75f0ab");svg.appendChild(circle);var label=document.createElementNS(ns,"text");label.setAttribute("x",c.x+10);label.setAttribute("y",c.y+4);label.setAttribute("fill","#eaf5ee");label.setAttribute("font-size","11");label.textContent=String(e.event_type||"event").slice(0,22);svg.appendChild(label);});
+   box.appendChild(svg);box.appendChild(make("h3","","Chronological timeline"));var list=make("ol","timeline");list.start=1;
+   shown.forEach(function(e){var item=make("li","");item.textContent=(e.timestamp||"time unknown")+" · "+(e.event_type||"event")+" · "+(e.process||"unknown process")+" · PID "+(e.pid===null||e.pid===undefined?"?":e.pid);list.appendChild(item);});
+   box.appendChild(list);visual.appendChild(box);
+ }
+ if(data.diff){var box=make("section","viz-panel");box.appendChild(make("h3","","Build comparison"));box.appendChild(make("p","","Added printable strings: "+JSON.stringify(data.diff.added_printable_strings||[])));box.appendChild(make("p","","Removed printable strings: "+JSON.stringify(data.diff.removed_printable_strings||[])));visual.appendChild(box);}
+}
 async function run(id,fn){var b=document.getElementById(id);b.disabled=true;status("Analyzing locally…",false);try{show(await fn());status("Analysis finished. Review evidence before conclusions.",false);}catch(e){status(e.message||"Unexpected error.",true);}finally{b.disabled=false;}}
 document.getElementById("inspectBtn").onclick=function(){run("inspectBtn",async function(){return post("/api/inspect",await fileData(document.getElementById("inspectFile").files[0]));});};
 document.getElementById("eventsBtn").onclick=function(){run("eventsBtn",async function(){return post("/api/events",await fileData(document.getElementById("eventsFile").files[0]));});};
