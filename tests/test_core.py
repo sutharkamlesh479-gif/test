@@ -98,6 +98,7 @@ def test_dashboard_homepage_is_served() -> None:
         assert "AURIX OMEGA" in body
         assert 'id="visual"' in body
         assert "Observed event relationships" in body
+        assert "Combined investigation" in body
         assert res.getheader("X-Content-Type-Options") == "nosniff"
         conn.close()
     finally:
@@ -154,3 +155,30 @@ def test_baseline_requires_target_artifact(tmp_path: Path) -> None:
     file.write_bytes(b"baseline")
     with pytest.raises(ValueError, match="requires --artifact"):
         run_investigation(baseline_path=file)
+
+
+
+def test_dashboard_combined_investigation_api() -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DashboardHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        conn = HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        payload = {
+            "artifact": {"filename": "sample.txt", "data_base64": base64.b64encode(b"tiny sample artifact").decode()},
+            "events": {"filename": "events.jsonl", "data_base64": base64.b64encode(
+                b'{"timestamp":"2026-01-01T00:00:00Z","event_type":"process_start","process":"demo","pid":4}'
+            ).decode()},
+            "baseline": None,
+        }
+        conn.request("POST", "/api/investigate", body=json.dumps(payload), headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        result = json.loads(response.read().decode())
+        assert response.status == 200
+        assert result["analysis_type"] == "bounded_investigation"
+        assert result["summary"]["steps_completed"] == 2
+        conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=3)
