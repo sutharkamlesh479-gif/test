@@ -12,9 +12,10 @@ from urllib.parse import urlparse, urlsplit
 
 from .analyzers import analyze_file, compare_files
 from .events import analyze_events
+from .investigation import run_investigation
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
-MAX_REQUEST_BYTES = 2 * MAX_UPLOAD_BYTES + 1024 * 1024
+MAX_REQUEST_BYTES = 4 * MAX_UPLOAD_BYTES + 1024 * 1024
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AURIX OMEGA</title><style>
@@ -34,7 +35,12 @@ footer{border-top:1px solid var(--line);padding-top:16px;margin-top:30px;color:v
 <section class="panel"><div class="eyebrow">02 / Timeline</div><h2>Analyze events</h2><p>Import JSON/JSONL logs. Time links are not proof of causation.</p>
 <label for="eventsFile">Choose JSON / JSONL</label><input id="eventsFile" type="file"><button id="eventsBtn">Build timeline</button></section>
 <section class="panel"><div class="eyebrow">03 / Compare</div><h2>Compare two files</h2><p>Review hash, size and printable-string changes.</p>
-<label for="beforeFile">Baseline file</label><input id="beforeFile" type="file"><label for="afterFile">Newer file</label><input id="afterFile" type="file"><button id="diffBtn">Compare artifacts</button></section></div>
+<label for="beforeFile">Baseline file</label><input id="beforeFile" type="file"><label for="afterFile">Newer file</label><input id="afterFile" type="file"><button id="diffBtn">Compare artifacts</button></section>
+<section class="panel"><div class="eyebrow">04 / Case</div><h2>Combined investigation</h2><p>Run a bounded evidence-led workflow across selected inputs in one report.</p>
+<label for="caseArtifact">Target artifact (optional)</label><input id="caseArtifact" type="file">
+<label for="caseEvents">Event export (optional)</label><input id="caseEvents" type="file" accept=".json,.jsonl,.txt,application/json">
+<label for="caseBaseline">Baseline file (requires target)</label><input id="caseBaseline" type="file">
+<button id="caseBtn">Investigate selected evidence</button></section></div>
 <section class="panel"><div class="eyebrow">Investigation output</div><div id="status" class="status" role="status">Ready. Select a task above.</div>
 <div id="output" class="output"><div id="visual"></div><details><summary>Raw JSON evidence</summary><pre id="result"></pre></details><button id="downloadBtn">Download JSON report</button></div>
 <p class="hint">OMEGA treats selected files as data and never launches them. Review indicators are not malware verdicts. Maximum upload: 12 MiB per file.</p></section>
@@ -43,6 +49,7 @@ footer{border-top:1px solid var(--line);padding-top:16px;margin-top:30px;color:v
 function status(t,bad){statusEl.textContent=t;statusEl.className=bad?"status risk":"status";}
 function fileData(file){return new Promise(function(resolve,reject){if(!file){reject(new Error("Choose all required file(s) first."));return;}if(file.size>12*1024*1024){reject(new Error("Dashboard upload limit is 12 MiB per file."));return;}
 var r=new FileReader();r.onerror=function(){reject(new Error("Could not read selected file."));};r.onload=function(){var v=String(r.result);resolve({filename:file.name,data_base64:v.slice(v.indexOf(",")+1)});};r.readAsDataURL(file);});}
+function optionalFileData(file){return file?fileData(file):Promise.resolve(null);}
 async function post(route,payload){var r=await fetch(route,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});var d=await r.json();if(!r.ok)throw new Error(d.error||"Request failed.");return d;}
 function make(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n;}
 function metric(parent,label,value){var card=make("div","metric"),small=make("small","",label),strong=make("strong","",value);card.appendChild(small);card.appendChild(strong);parent.appendChild(card);}
@@ -50,28 +57,33 @@ function show(data){
  last=data;result.textContent=JSON.stringify(data,null,2);out.style.display="block";
  var visual=document.getElementById("visual");visual.replaceChildren();
  var metrics=make("div","metrics");
- if(data.artifact){metric(metrics,"SHA-256",String(data.artifact.sha256||"").slice(0,18)+"…");metric(metrics,"Size",String(data.artifact.size_bytes||0)+" bytes");metric(metrics,"Format",data.artifact.detected_type||"Unknown");metric(metrics,"Strings",data.artifact.printable_string_count||0);}
- if(data.summary){if(data.summary.records_parsed!==undefined)metric(metrics,"Events",data.summary.records_parsed);if(data.summary.timeline_links!==undefined)metric(metrics,"Timeline links",data.summary.timeline_links);if(data.summary.parse_errors!==undefined)metric(metrics,"Parse issues",data.summary.parse_errors);if(data.summary.result!==undefined)metric(metrics,"Static result",data.summary.result);}
- if(data.diff){metric(metrics,"Identical bytes",data.diff.identical_sha256?"Yes":"No");metric(metrics,"Size delta",String(data.diff.size_delta_bytes)+" bytes");metric(metrics,"Added strings",(data.diff.added_printable_strings||[]).length);metric(metrics,"Removed strings",(data.diff.removed_printable_strings||[]).length);}
+ var artifactData=data.artifact||(data.analyses&&data.analyses.target_artifact&&data.analyses.target_artifact.artifact);
+ var eventData=(data.analyses&&data.analyses.event_timeline)?data.analyses.event_timeline:data;
+ var diffReport=(data.analyses&&data.analyses.baseline_comparison)?data.analyses.baseline_comparison:data;
+ var diffData=diffReport.diff||data.diff;
+ if(artifactData){metric(metrics,"SHA-256",String(artifactData.sha256||"").slice(0,18)+"…");metric(metrics,"Size",String(artifactData.size_bytes||0)+" bytes");metric(metrics,"Format",artifactData.detected_type||"Unknown");metric(metrics,"Strings",artifactData.printable_string_count||0);}
+ if(data.summary){if(data.summary.steps_completed!==undefined)metric(metrics,"Steps completed",data.summary.steps_completed);if(data.summary.findings_count!==undefined)metric(metrics,"Findings",data.summary.findings_count);if(data.summary.evidence_items!==undefined)metric(metrics,"Evidence items",data.summary.evidence_items);if(data.summary.records_parsed!==undefined)metric(metrics,"Events",data.summary.records_parsed);if(data.summary.timeline_links!==undefined)metric(metrics,"Timeline links",data.summary.timeline_links);if(data.summary.parse_errors!==undefined)metric(metrics,"Parse issues",data.summary.parse_errors);if(data.summary.result!==undefined)metric(metrics,"Static result",data.summary.result);}
+ if(diffData){metric(metrics,"Identical bytes",diffData.identical_sha256?"Yes":"No");metric(metrics,"Size delta",String(diffData.size_delta_bytes)+" bytes");metric(metrics,"Added strings",(diffData.added_printable_strings||[]).length);metric(metrics,"Removed strings",(diffData.removed_printable_strings||[]).length);}
  if(metrics.childElementCount)visual.appendChild(metrics);
  if(Array.isArray(data.findings)&&data.findings.length){var box=make("section","viz-panel");box.appendChild(make("h3","","Findings to review"));data.findings.slice(0,50).forEach(function(f){var row=make("div","finding-row"),head=make("strong","",String(f.severity||"info").toUpperCase()+" · "+(f.title||"Observation")),desc=make("p","",f.description||""),evidence=make("p","hint","Evidence: "+JSON.stringify(f.evidence||[]));row.appendChild(head);row.appendChild(desc);row.appendChild(evidence);box.appendChild(row);});visual.appendChild(box);}
- if(Array.isArray(data.events)&&data.events.length){
+ if(Array.isArray(eventData.events)&&eventData.events.length){
    var box=make("section","viz-panel");box.appendChild(make("h3","","Observed event relationships"));box.appendChild(make("p","hint","Edges indicate temporal association only—not causation. Graph shows at most 20 events."));
-   var shown=data.events.slice(0,20),byId=new Map(),coords=new Map(),ns="http://www.w3.org/2000/svg",rows=Math.ceil(shown.length/4),height=Math.max(100,rows*68+24),svg=document.createElementNS(ns,"svg");
+   var shown=eventData.events.slice(0,20),coords=new Map(),ns="http://www.w3.org/2000/svg",rows=Math.ceil(shown.length/4),height=Math.max(100,rows*68+24),svg=document.createElementNS(ns,"svg");
    svg.setAttribute("viewBox","0 0 720 "+height);svg.setAttribute("role","img");svg.setAttribute("aria-label","Event relationship graph");svg.classList.add("event-graph");
-   shown.forEach(function(e,i){byId.set(e.event_id,e);coords.set(e.event_id,{x:45+(i%4)*180,y:30+Math.floor(i/4)*68});});
-   (data.edges||[]).forEach(function(edge){var a=coords.get(edge.from_event),b=coords.get(edge.to_event);if(!a||!b)return;var line=document.createElementNS(ns,"line");line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);line.setAttribute("x2",b.x);line.setAttribute("y2",b.y);line.setAttribute("stroke","#527766");line.setAttribute("stroke-width","2");svg.appendChild(line);});
+   shown.forEach(function(e,i){coords.set(e.event_id,{x:45+(i%4)*180,y:30+Math.floor(i/4)*68});});
+   (eventData.edges||[]).forEach(function(edge){var a=coords.get(edge.from_event),b=coords.get(edge.to_event);if(!a||!b)return;var line=document.createElementNS(ns,"line");line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);line.setAttribute("x2",b.x);line.setAttribute("y2",b.y);line.setAttribute("stroke","#527766");line.setAttribute("stroke-width","2");svg.appendChild(line);});
    shown.forEach(function(e){var c=coords.get(e.event_id),circle=document.createElementNS(ns,"circle");circle.setAttribute("cx",c.x);circle.setAttribute("cy",c.y);circle.setAttribute("r","7");circle.setAttribute("fill","#75f0ab");svg.appendChild(circle);var label=document.createElementNS(ns,"text");label.setAttribute("x",c.x+10);label.setAttribute("y",c.y+4);label.setAttribute("fill","#eaf5ee");label.setAttribute("font-size","11");label.textContent=String(e.event_type||"event").slice(0,22);svg.appendChild(label);});
    box.appendChild(svg);box.appendChild(make("h3","","Chronological timeline"));var list=make("ol","timeline");list.start=1;
    shown.forEach(function(e){var item=make("li","");item.textContent=(e.timestamp||"time unknown")+" · "+(e.event_type||"event")+" · "+(e.process||"unknown process")+" · PID "+(e.pid===null||e.pid===undefined?"?":e.pid);list.appendChild(item);});
    box.appendChild(list);visual.appendChild(box);
  }
- if(data.diff){var box=make("section","viz-panel");box.appendChild(make("h3","","Build comparison"));box.appendChild(make("p","","Added printable strings: "+JSON.stringify(data.diff.added_printable_strings||[])));box.appendChild(make("p","","Removed printable strings: "+JSON.stringify(data.diff.removed_printable_strings||[])));visual.appendChild(box);}
+ if(diffData){var box=make("section","viz-panel");box.appendChild(make("h3","","Build comparison"));box.appendChild(make("p","","Added printable strings: "+JSON.stringify(diffData.added_printable_strings||[])));box.appendChild(make("p","","Removed printable strings: "+JSON.stringify(diffData.removed_printable_strings||[])));visual.appendChild(box);}
 }
 async function run(id,fn){var b=document.getElementById(id);b.disabled=true;status("Analyzing locally…",false);try{show(await fn());status("Analysis finished. Review evidence before conclusions.",false);}catch(e){status(e.message||"Unexpected error.",true);}finally{b.disabled=false;}}
 document.getElementById("inspectBtn").onclick=function(){run("inspectBtn",async function(){return post("/api/inspect",await fileData(document.getElementById("inspectFile").files[0]));});};
 document.getElementById("eventsBtn").onclick=function(){run("eventsBtn",async function(){return post("/api/events",await fileData(document.getElementById("eventsFile").files[0]));});};
 document.getElementById("diffBtn").onclick=function(){run("diffBtn",async function(){var a=await fileData(document.getElementById("beforeFile").files[0]),b=await fileData(document.getElementById("afterFile").files[0]);return post("/api/diff",{before:a,after:b});});};
+document.getElementById("caseBtn").onclick=function(){run("caseBtn",async function(){var artifact=await optionalFileData(document.getElementById("caseArtifact").files[0]);var events=await optionalFileData(document.getElementById("caseEvents").files[0]);var baseline=await optionalFileData(document.getElementById("caseBaseline").files[0]);if(!artifact&&!events)throw new Error("Select at least a target artifact or event export.");if(baseline&&!artifact)throw new Error("A baseline requires a target artifact.");return post("/api/investigate",{artifact:artifact,events:events,baseline:baseline});});};
 document.getElementById("downloadBtn").onclick=function(){if(!last)return;var blob=new Blob([JSON.stringify(last,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="aurix-omega-report.json";a.click();URL.revokeObjectURL(url);};
 })();</script></body></html>"""
 
@@ -173,7 +185,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if not self._guard_request():
             return
         route = urlparse(self.path).path
-        if route not in {"/api/inspect", "/api/events", "/api/diff"}:
+        if route not in {"/api/inspect", "/api/events", "/api/diff", "/api/investigate"}:
             self._json(404, {"error": "Not found"})
             return
         try:
@@ -188,7 +200,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             if not isinstance(payload, dict):
                 raise ValueError("Request JSON must be an object.")
-            if route == "/api/inspect":
+            if route == "/api/investigate":
+                with tempfile.TemporaryDirectory(prefix="aurix-omega-case-") as folder:
+                    def save_optional(field: str, safe_name: str):
+                        upload = payload.get(field)
+                        if upload is None:
+                            return None
+                        filename, data = _decode_upload(upload)
+                        path = Path(folder) / (safe_name + Path(filename).suffix[:16])
+                        path.write_bytes(data)
+                        return path
+                    artifact_path = save_optional("artifact", "target")
+                    events_path = save_optional("events", "events")
+                    baseline_path = save_optional("baseline", "baseline")
+                    report = run_investigation(artifact_path, events_path, baseline_path)
+            elif route == "/api/inspect":
                 filename, data = _decode_upload(payload)
                 report = _temporary_analysis(filename, data, analyze_file)
             elif route == "/api/events":
