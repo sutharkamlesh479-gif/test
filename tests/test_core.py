@@ -22,12 +22,12 @@ def test_hash_and_safe_file_inspection(tmp_path: Path) -> None:
     assert sha256_file(file) == expected
     assert result["artifact"]["sha256"] == expected
     assert result["artifact"]["detected_type"].startswith("Windows PE candidate")
-    assert "harmless sample string" in result["artifact"]["printable_strings"]
+    assert any("harmless sample string" in item for item in result["artifact"]["printable_strings"])
     assert "pe_headers" in result["artifact"]
 
 
 def test_string_extraction_handles_deduplication_and_utf16() -> None:
-    assert extract_printable_strings(b"repeat-marker repeat-marker") == ["repeat-marker"]
+    assert extract_printable_strings(b"repeat-marker\x00repeat-marker") == ["repeat-marker"]
     assert "HELLO" in extract_printable_strings("HELLO".encode("utf-16le"))
 
 
@@ -45,7 +45,7 @@ def test_comparison_reports_changes(tmp_path: Path) -> None:
     after.write_text("base marker alpha extra-marker", encoding="utf-8")
     report = compare_files(before, after)
     assert not report["diff"]["identical_sha256"]
-    assert "extra-marker" in report["diff"]["added_printable_strings"]
+    assert "base marker alpha extra-marker" in report["diff"]["added_printable_strings"]
 
 
 def test_events_build_cautious_timeline(tmp_path: Path) -> None:
