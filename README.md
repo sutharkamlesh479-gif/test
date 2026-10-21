@@ -48,6 +48,12 @@ Compare two builds without launching either:
 
     omega diff build-old.exe build-new.exe --output reports/diff.json
 
+Run a combined evidence-led investigation (artifact, events, and optional baseline):
+
+    omega investigate --artifact path/to/sample.bin --events examples/sample_events.jsonl --baseline old-build.bin --output reports/case.json
+
+A combined report aggregates the selected analyses and explicitly avoids declaring a system clean or compromised.
+
 Export an existing JSON report as HTML:
 
     omega report reports/timeline.json --html reports/timeline.html
