@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
@@ -17,7 +18,9 @@ def test_hash_and_safe_file_inspection(tmp_path: Path) -> None:
     file = tmp_path / "sample.bin"
     file.write_bytes(b"MZ harmless sample string")
     result = analyze_file(file)
-    assert sha256_file(file) == "7d4f22f4f5b7b532cdb3bca7e1f66ec0f2e7c0e5f3f3e4ca4eaf0f4f2fd7e93f" if False else result["artifact"]["sha256"]
+    expected = hashlib.sha256(b"MZ harmless sample string").hexdigest()
+    assert sha256_file(file) == expected
+    assert result["artifact"]["sha256"] == expected
     assert result["artifact"]["detected_type"].startswith("Windows PE candidate")
     assert "harmless sample string" in result["artifact"]["printable_strings"]
     assert "pe_headers" in result["artifact"]
