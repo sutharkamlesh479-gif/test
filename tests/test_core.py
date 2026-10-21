@@ -95,6 +95,8 @@ def test_dashboard_homepage_is_served() -> None:
         body = res.read().decode()
         assert res.status == 200
         assert "AURIX OMEGA" in body
+        assert 'id="visual"' in body
+        assert "Observed event relationships" in body
         assert res.getheader("X-Content-Type-Options") == "nosniff"
         conn.close()
     finally:
