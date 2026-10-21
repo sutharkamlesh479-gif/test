@@ -106,3 +106,14 @@ See [SECURITY.md](SECURITY.md) for reporting and safe-use notes.
 Unchecked items are future work, not existing functionality.
 
 MIT License. Created by Kamlesh Suthar.
+
+## Documentation and contributions
+
+- [Security policy](SECURITY.md)
+- [Contribution guide](CONTRIBUTING.md)
+- [Architecture overview](docs/ARCHITECTURE.md)
+- [Threat model and limitations](docs/THREAT_MODEL.md)
+- [Changelog](CHANGELOG.md)
+- [Report a bug](.github/ISSUE_TEMPLATE/bug_report.yml)
+
+Continuous integration: [view GitHub Actions](https://github.com/sutharkamlesh479-gif/test/actions).
