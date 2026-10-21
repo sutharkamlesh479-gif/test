@@ -1,0 +1,4 @@
+{"timestamp":"2026-01-02T10:00:00Z","event_type":"process_start","process":"training-demo.exe","pid":120,"parent_pid":1,"source":"synthetic-training-data"}
+{"timestamp":"2026-01-02T10:00:02Z","event_type":"file_created","process":"training-demo.exe","pid":120,"path":"C:/Lab/output.txt","source":"synthetic-training-data"}
+{"timestamp":"2026-01-02T10:01:00Z","event_type":"network_connection","process":"training-demo.exe","pid":120,"destination":"127.0.0.1:8765","source":"synthetic-training-data"}
+{"timestamp":"2026-01-02T10:04:30Z","event_type":"process_exit","process":"training-demo.exe","pid":120,"source":"synthetic-training-data"}
