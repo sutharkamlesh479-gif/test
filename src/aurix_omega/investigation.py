@@ -15,10 +15,10 @@ def run_investigation(
     baseline_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run requested read-only analyses and combine evidence without inventing a verdict."""
-    if artifact_path is None and events_path is None:
-        raise ValueError("Supply at least one of --artifact or --events.")
     if baseline_path is not None and artifact_path is None:
         raise ValueError("--baseline requires --artifact so it has a target to compare.")
+    if artifact_path is None and events_path is None:
+        raise ValueError("Supply at least one of --artifact or --events.")
 
     report = base_report("bounded_investigation")
     report["investigation_model"] = "deterministic-orchestration-v1"
