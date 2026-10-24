@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 APP_DIR = Path.home() / ".aurix-agent"
 CONFIG_PATH = APP_DIR / "config.json"
@@ -53,6 +54,18 @@ def save_config(config: dict[str, Any]) -> None:
     except OSError:
         # Windows ACLs, rather than POSIX mode bits, control access there.
         pass
+
+
+def is_allowed_endpoint(value: str) -> bool:
+    """Allow public HTTPS endpoints and plain HTTP only for loopback services."""
+    try:
+        parsed = urlsplit(str(value).strip())
+        host = (parsed.hostname or "").lower()
+    except ValueError:
+        return False
+    if parsed.scheme == "https" and host:
+        return True
+    return parsed.scheme == "http" and host in {"localhost", "127.0.0.1", "::1"}
 
 
 def enabled_providers(config: dict[str, Any]) -> list[dict[str, Any]]:
