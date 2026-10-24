@@ -183,7 +183,9 @@ class AURIXWindow(tk.Tk):
         self.minsize(900, 640)
         self.configure(bg=BG)
         self.config_data = load_config()
-        self.workspace = tk.StringVar(value=str(Path.home()))
+        default_workspace = Path.home() / "AURIX-Workspace"
+        default_workspace.mkdir(parents=True, exist_ok=True)
+        self.workspace = tk.StringVar(value=str(default_workspace))
         self.allow_writes = tk.BooleanVar(value=False)
         self.allow_execution = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Ready")
