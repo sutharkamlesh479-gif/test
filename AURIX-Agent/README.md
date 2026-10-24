@@ -40,8 +40,9 @@ Provider endpoint examples (availability and model support depend on provider/ac
 - OpenAI: `https://api.openai.com/v1/chat/completions`
 - Google Gemini OpenAI-compatible endpoint: `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
 - OpenRouter: `https://openrouter.ai/api/v1/chat/completions`
+- Local Ollama (HTTP is restricted to loopback): `http://localhost:11434/v1/chat/completions`
 
-Configure the model ID and API key from the provider's current documentation. The endpoint must use HTTPS. The app cannot guarantee that every provider/model implements tool calling identically.
+Configure the model ID and API key from the provider's current documentation. Remote endpoints must use HTTPS. Plain HTTP is allowed only for loopback hostnames (`localhost`, `127.0.0.1`, or `::1`) so a local model server can be used without exposing an unencrypted network endpoint. The app cannot guarantee that every provider/model implements tool calling identically.
 
 ## Permissions and autonomy
 
