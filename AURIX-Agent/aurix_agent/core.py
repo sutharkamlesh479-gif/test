@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable
 
-from .config import enabled_providers
+from .config import enabled_providers, is_allowed_endpoint
 from .tools import TOOL_DEFINITIONS, WorkspaceTools, ToolError
 
 EventCallback = Callable[[str, str], None]
@@ -40,8 +40,8 @@ class OpenAICompatibleClient:
                 raise AgentError("Task cancelled.")
             endpoint = str(provider.get("endpoint", "")).strip()
             model = str(provider.get("model", "")).strip()
-            if not endpoint.startswith("https://"):
-                errors.append(f"{provider.get('name', 'Provider')}: endpoint must use HTTPS.")
+            if not is_allowed_endpoint(endpoint):
+                errors.append(f"{provider.get('name', 'Provider')}: use HTTPS, or HTTP on localhost only.")
                 continue
             if not model:
                 errors.append(f"{provider.get('name', 'Provider')}: model is missing.")
