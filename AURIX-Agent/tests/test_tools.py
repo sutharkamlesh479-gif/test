@@ -29,6 +29,13 @@ class WorkspaceToolsTests(unittest.TestCase):
         with self.assertRaises(ToolError):
             WorkspaceTools(self.root).read_file("../outside.txt")
 
+    def test_sensitive_files_are_blocked(self):
+        (self.root / ".env").write_text("API_KEY=private", encoding="utf-8")
+        with self.assertRaises(ToolError):
+            WorkspaceTools(self.root).read_file(".env")
+        with self.assertRaises(ToolError):
+            WorkspaceTools(self.root, allow_writes=True).write_file(".env", "API_KEY=overwrite")
+
     def test_write_needs_opt_in(self):
         with self.assertRaises(ToolError):
             WorkspaceTools(self.root).write_file("new.txt", "hello")
