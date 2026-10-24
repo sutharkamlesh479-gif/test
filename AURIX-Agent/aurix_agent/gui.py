@@ -7,7 +7,7 @@ from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 from datetime import datetime
 
-from .config import load_config, save_config, enabled_providers, CONFIG_PATH
+from .config import load_config, save_config, enabled_providers, is_allowed_endpoint, CONFIG_PATH
 from .core import AURIXAgent, AgentError
 
 BG = "#101412"
@@ -39,7 +39,7 @@ class ProviderSettings(tk.Toplevel):
 
     def _build(self):
         tk.Label(self, text="AI PROVIDERS", bg=BG, fg=FG, font=("Segoe UI", 16, "bold")).pack(anchor="w", padx=20, pady=(18, 4))
-        tk.Label(self, text="Use an OpenAI-compatible chat-completions endpoint. API keys stay on this PC.", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", padx=20, pady=(0, 12))
+        tk.Label(self, text="Use HTTPS, or HTTP on localhost for a local model. API keys stay on this PC.", bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", padx=20, pady=(0, 12))
         outer = tk.Frame(self, bg=BG)
         outer.pack(fill="both", expand=True, padx=20, pady=(0, 14))
         left = tk.Frame(outer, bg=PANEL, highlightbackground=BORDER, highlightthickness=1, width=220)
@@ -130,8 +130,8 @@ class ProviderSettings(tk.Toplevel):
 
     def _save_provider(self):
         values = {key: var.get().strip() for key, var in self.vars.items()}
-        if not values["name"] or not values["endpoint"].startswith("https://") or not values["model"]:
-            messagebox.showerror("Invalid provider", "Name, model, and an HTTPS chat-completions URL are required.", parent=self)
+        if not values["name"] or not is_allowed_endpoint(values["endpoint"]) or not values["model"]:
+            messagebox.showerror("Invalid provider", "Name, model, and a valid HTTPS or loopback HTTP chat-completions URL are required.", parent=self)
             return
         values["enabled"] = self.enabled_var.get()
         index = self._selected_index()
@@ -162,7 +162,7 @@ class ProviderSettings(tk.Toplevel):
         index = self._selected_index()
         if index is not None:
             values = {key: var.get().strip() for key, var in self.vars.items()}
-            if values["name"] and values["endpoint"].startswith("https://") and values["model"]:
+            if values["name"] and is_allowed_endpoint(values["endpoint"]) and values["model"]:
                 values["enabled"] = self.enabled_var.get()
                 self.providers[index] = values
         self.config_data["providers"] = self.providers
