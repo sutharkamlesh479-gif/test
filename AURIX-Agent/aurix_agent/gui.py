@@ -354,14 +354,19 @@ class AURIXWindow(tk.Tk):
             self.history = []
         task_history = list(self.history)
         self.history.append({"role": "user", "content": task})
+        # Capture Tk variables on the UI thread; background threads should not call Tcl/Tk.
+        workspace_path = self.workspace.get()
+        allow_writes = self.allow_writes.get()
+        allow_execution = self.allow_execution.get()
+        config_snapshot = self.config_data
 
         def worker_body():
             try:
                 agent = AURIXAgent(
-                    config=self.config_data,
-                    workspace=self.workspace.get(),
-                    allow_writes=self.allow_writes.get(),
-                    allow_execution=self.allow_execution.get(),
+                    config=config_snapshot,
+                    workspace=workspace_path,
+                    allow_writes=allow_writes,
+                    allow_execution=allow_execution,
                     event=lambda kind, message: self.events.put((kind, message)),
                     cancel=self.cancel_event,
                 )
