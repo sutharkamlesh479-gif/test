@@ -11,6 +11,18 @@ from typing import Any
 EXCLUDED_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", ".mypy_cache", "dist", "build"}
 MAX_TEXT_BYTES = 1_000_000
 MAX_FILES = 500
+SENSITIVE_NAMES = {".env", ".env.local", ".npmrc", ".pypirc", "id_rsa", "id_ed25519", "credentials.json", "secrets.json"}
+SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore"}
+
+
+def _is_sensitive_path(path: Path) -> bool:
+    for part in path.parts:
+        name = part.lower()
+        if name in SENSITIVE_NAMES or name.startswith(".env.") or name.endswith(tuple(SENSITIVE_SUFFIXES)):
+            return True
+        if any(token in name for token in ("password", "secret", "credential", "private_key", "access_token")):
+            return True
+    return False
 
 TOOL_DEFINITIONS = [
     {"type": "function", "function": {"name": "list_files", "description": "List files inside the selected workspace. Paths are relative to the workspace root.", "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Relative folder path, default '.'"}}, "required": []}}},
@@ -72,6 +84,8 @@ class WorkspaceTools:
 
     def read_file(self, path: str) -> dict[str, Any]:
         target = self._resolve(path)
+        if _is_sensitive_path(target.relative_to(self.workspace)):
+            raise ToolError("Reading secret or credential-like files is blocked by default.")
         if not target.is_file():
             raise ToolError("The requested path is not a file.")
         if target.stat().st_size > MAX_TEXT_BYTES:
@@ -89,6 +103,8 @@ class WorkspaceTools:
         matches = []
         scanned = 0
         for item in self._iter_files(root):
+            if _is_sensitive_path(item.relative_to(self.workspace)):
+                continue
             if item.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".zip", ".exe", ".dll", ".pyc", ".db", ".sqlite"}:
                 continue
             try:
@@ -109,6 +125,8 @@ class WorkspaceTools:
         if not self.allow_writes:
             raise ToolError("File writes are disabled. Enable 'Allow file changes' in the GUI first.")
         target = self._resolve(path)
+        if _is_sensitive_path(target.relative_to(self.workspace)):
+            raise ToolError("Writing secret or credential-like files is blocked by default.")
         if not target.name or target.is_dir():
             raise ToolError("A file path is required.")
         if not isinstance(content, str) or len(content.encode("utf-8")) > MAX_TEXT_BYTES:
