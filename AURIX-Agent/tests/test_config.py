@@ -1,11 +1,18 @@
 import unittest
 
-from aurix_agent.config import DEFAULT_CONFIG, enabled_providers
+from aurix_agent.config import DEFAULT_CONFIG, enabled_providers, is_allowed_endpoint
 
 
 class ConfigTests(unittest.TestCase):
     def test_default_config_has_provider(self):
         self.assertEqual(DEFAULT_CONFIG["providers"][0]["name"], "OpenAI-compatible")
+
+    def test_endpoint_policy(self):
+        self.assertTrue(is_allowed_endpoint("https://api.example/v1/chat/completions"))
+        self.assertTrue(is_allowed_endpoint("http://localhost:11434/v1/chat/completions"))
+        self.assertTrue(is_allowed_endpoint("http://127.0.0.1:11434/v1/chat/completions"))
+        self.assertFalse(is_allowed_endpoint("http://api.example/v1/chat/completions"))
+        self.assertFalse(is_allowed_endpoint("file:///tmp/config.json"))
 
     def test_enabled_provider_priority(self):
         config = {"active_provider": "B", "providers": [
